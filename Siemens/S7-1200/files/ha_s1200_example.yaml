@@ -1,0 +1,138 @@
+# ============================================================
+# ESEMPIO: Siemens S7-1200 — package HA
+# Prefisso: plc_s1200_ (non conflitta con produzione plc_s7_01_)
+# Scopo: connectivity, heartbeat, comm_age, cycle label, AI scaling
+# Copiare in: /config/packages/plc/ha_s1200_example.yaml
+# ============================================================
+
+# ── MQTT LWT ─────────────────────────────────────────────────
+mqtt:
+  binary_sensor:
+    - name: "plc_s1200_link"
+      unique_id: plc_s1200_ex_link
+      state_topic: "plc/plc_s1200/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+
+# ── TEMPLATE ─────────────────────────────────────────────────
+template:
+  - binary_sensor:
+      # Comm OK basato su heartbeat PLC (piu preciso del LWT)
+      - name: plc_s1200_stack_comm_ok
+        unique_id: plc_s1200_ex_stack_comm_ok
+        device_class: connectivity
+        state: >
+          {% set e = states.binary_sensor.plc_s1200_sts_plc_hb %}
+          {% if e is not none and e.state not in ['unknown','unavailable'] %}
+            {{ (as_timestamp(now()) - as_timestamp(e.last_reported, 0)) < 120 }}
+          {% else %}
+            false
+          {% endif %}
+
+      # Heartbeat PLC vivo (toggle ogni ciclo, ~500ms)
+      - name: plc_s1200_plc_hb_alive
+        unique_id: plc_s1200_ex_plc_hb_alive
+        device_class: connectivity
+        state: >
+          {% set e = states.binary_sensor.plc_s1200_sts_plc_hb %}
+          {% if e is not none and e.last_changed is not none %}
+            {{ (as_timestamp(now()) - as_timestamp(e.last_changed, 0)) < 10 }}
+          {% else %}
+            false
+          {% endif %}
+
+  - sensor:
+      # Comm age basato su heartbeat PLC
+      - name: plc_s1200_comm_age_s
+        unique_id: plc_s1200_ex_comm_age_s
+        unit_of_measurement: "s"
+        state_class: measurement
+        availability: "{{ is_state('input_boolean.plc_s1200_en', 'on') }}"
+        state: >
+          {% set e = states.binary_sensor.plc_s1200_sts_plc_hb %}
+          {% if e is not none and e.state not in ['unknown','unavailable','none',''] %}
+            {{ [(as_timestamp(now()) - as_timestamp(e.last_reported, 0)) | int, 9999] | min }}
+          {% else %}
+            9999
+          {% endif %}
+
+      # Label step ciclo (0-9 → nome output attivo)
+      - name: plc_s1200_cycle_step_label
+        unique_id: plc_s1200_ex_cycle_step_label
+        icon: mdi:numeric
+        state: >
+          {% set step = states('sensor.plc_s1200_cycle_step') | int(-1) %}
+          {% set labels = {
+            0: 'Q0.0', 1: 'Q0.1', 2: 'Q0.2', 3: 'Q0.3', 4: 'Q0.4',
+            5: 'Q0.5', 6: 'Q0.6', 7: 'Q0.7', 8: 'Q1.0', 9: 'Q1.1'
+          } %}
+          {{ labels.get(step, 'idle') }}
+
+      # AI0 scaled (0-27648 → 0-100 engineering)
+      - name: plc_s1200_ai0_scaled
+        unique_id: plc_s1200_ex_ai0_scaled
+        unit_of_measurement: "%"
+        state_class: measurement
+        availability: "{{ states('sensor.plc_s1200_ai0_raw') not in ['unavailable','unknown'] }}"
+        state: >
+          {% set inl = 0 %}
+          {% set inh = 27648 %}
+          {% set outl = 0 %}
+          {% set outh = 100 %}
+          {% set raw = states('sensor.plc_s1200_ai0_raw') | float(0) %}
+          {% if inh != inl %}
+            {{ (outl + (raw - inl) * (outh - outl) / (inh - inl)) | round(2) }}
+          {% else %}
+            0
+          {% endif %}
+
+      # AI1 scaled
+      - name: plc_s1200_ai1_scaled
+        unique_id: plc_s1200_ex_ai1_scaled
+        unit_of_measurement: "%"
+        state_class: measurement
+        availability: "{{ states('sensor.plc_s1200_ai1_raw') not in ['unavailable','unknown'] }}"
+        state: >
+          {% set raw = states('sensor.plc_s1200_ai1_raw') | float(0) %}
+          {{ ((raw / 27648) * 100) | round(2) }}
+
+# ── INPUT HELPERS ────────────────────────────────────────────
+input_number:
+  plc_s1200_cycle_ms:
+    name: "S1200 Ciclo periodo (ms)"
+    min: 100
+    max: 10000
+    step: 100
+    initial: 500
+    mode: box
+    unit_of_measurement: "ms"
+    icon: mdi:timer-cog
+
+# ── AUTOMAZIONI ──────────────────────────────────────────────
+automation:
+  # Sync ciclo ms → PLC
+  - id: plc_s1200_ex_sync_cycle_ms
+    alias: plc_s1200_sync_cycle_ms
+    trigger:
+      - platform: state
+        entity_id: input_number.plc_s1200_cycle_ms
+    action:
+      - service: number.set_value
+        target:
+          entity_id: number.plc_s1200_cmd_cycle_ms
+        data:
+          value: "{{ states('input_number.plc_s1200_cycle_ms') | int }}"
+
+  # HA Heartbeat toggle ogni 5s (se comm_ok)
+  - id: plc_s1200_ex_ha_heartbeat
+    alias: plc_s1200_ha_heartbeat
+    trigger:
+      - platform: time_pattern
+        seconds: "/5"
+    condition:
+      - "{{ is_state('binary_sensor.plc_s1200_stack_comm_ok', 'on') }}"
+    action:
+      - service: switch.toggle
+        target:
+          entity_id: switch.plc_s1200_cmd_ha_hb

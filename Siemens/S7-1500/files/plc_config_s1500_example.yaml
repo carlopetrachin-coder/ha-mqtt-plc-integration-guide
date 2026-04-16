@@ -1,0 +1,29 @@
+# ============================================================
+# ESEMPIO: Siemens S7-1500 — config per plc_config.yaml
+# Prefisso entita: plc_s1500_ (non conflitta con produzione)
+# IP: 192.168.1.21 (online, testabile)
+# Driver: snap7 — stesso S7-1200, cambia solo IP/slot
+# Stato: template pronto, aggiungere punti quando PLC in servizio
+# ============================================================
+
+- id: plc_s1500
+  enable: false          # ← cambiare a true quando PLC configurato
+  name: "Siemens S7-1500 (esempio)"
+  driver: snap7
+  host: 192.168.1.21
+  rack: 0
+  slot: 1
+  points:
+
+    # ── ESEMPIO: stessa struttura S7-1200 ────────────────────
+    # Decommentare e adattare DB/byte/bit quando il DB e pronto
+    #
+    # - { id: plc_s1500_i0_0, name: "I0.0", kind: binary_sensor, group: fast,
+    #     snap7: { db: 2000, byte: 0, bit: 0 } }
+    #
+    # - { id: plc_s1500_ai0_raw, name: "AI0 Raw", kind: sensor, group: medium,
+    #     snap7: { db: 2000, byte: 10, type: int16 } }
+    #
+    # - { id: plc_s1500_q0_0_cmd, name: "Q0.0 Cmd", kind: switch, group: fast,
+    #     snap7: { db: 2000, byte: 20, bit: 0 } }
+    []

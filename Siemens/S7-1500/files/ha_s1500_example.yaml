@@ -1,0 +1,61 @@
+# ============================================================
+# ESEMPIO: Siemens S7-1500 — package HA (stub)
+# Prefisso: plc_s1500_
+# Scopo: connectivity base — aggiungere heartbeat/scaling quando attivo
+# Copiare in: /config/packages/plc/ha_s1500_example.yaml
+# ============================================================
+
+mqtt:
+  binary_sensor:
+    - name: "plc_s1500_link"
+      unique_id: plc_s1500_ex_link
+      state_topic: "plc/plc_s1500/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+
+template:
+  - binary_sensor:
+      - name: plc_s1500_stack_comm_ok
+        unique_id: plc_s1500_ex_stack_comm_ok
+        device_class: connectivity
+        state: >
+          {% set e = states.binary_sensor.plc_s1500_link %}
+          {% if e is not none and e.state not in ['unknown','unavailable'] %}
+            {{ (as_timestamp(now()) - as_timestamp(e.last_reported, 0)) < 120 }}
+          {% else %}
+            false
+          {% endif %}
+
+  - sensor:
+      - name: plc_s1500_comm_age_s
+        unique_id: plc_s1500_ex_comm_age_s
+        unit_of_measurement: "s"
+        state_class: measurement
+        availability: "{{ is_state('input_boolean.plc_s1500_en', 'on') }}"
+        state: >
+          {% set e = states.binary_sensor.plc_s1500_link %}
+          {% if e is not none and e.state not in ['unknown','unavailable','none',''] %}
+            {{ [(as_timestamp(now()) - as_timestamp(e.last_reported, 0)) | int, 9999] | min }}
+          {% else %}
+            9999
+          {% endif %}
+
+input_boolean:
+  plc_s1500_en:
+    name: "PLC S1500 abilitato"
+    icon: mdi:lan-connect
+
+shell_command:
+  plc_enable_s1500:  "rm -f /config/plc/plc_s1500.stop"
+  plc_disable_s1500: "touch /config/plc/plc_s1500.stop"
+
+command_line:
+  - binary_sensor:
+      name: plc_ping_s1500
+      unique_id: plc_ping_s1500
+      command: "ping -c 1 -W 1 192.168.1.21 > /dev/null 2>&1 && echo 'ON' || echo 'OFF'"
+      payload_on: "ON"
+      payload_off: "OFF"
+      scan_interval: 30
+      command_timeout: 2

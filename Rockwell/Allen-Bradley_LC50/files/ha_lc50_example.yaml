@@ -1,0 +1,90 @@
+# ============================================================
+# ESEMPIO: Allen-Bradley LC50 — package HA
+# Prefisso: plc_lc50_ (non conflitta con produzione plc_rw01_)
+# Scopo: connectivity, comm_age, scaling livelli
+# Copiare in: /config/packages/plc/ha_lc50.yaml
+# ============================================================
+
+# ── MQTT LWT — bridge online/offline ────────────────────────
+mqtt:
+  binary_sensor:
+    - name: "plc_lc50_link"
+      unique_id: plc_lc50_link
+      state_topic: "plc/plc_lc50/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+
+# ── TEMPLATE — comm_ok, comm_age, scaling ────────────────────
+template:
+  - binary_sensor:
+      - name: plc_lc50_stack_comm_ok
+        unique_id: plc_lc50_stack_comm_ok
+        device_class: connectivity
+        state: >
+          {% set e = states.binary_sensor.plc_lc50_link %}
+          {% if e is not none and e.state not in ['unknown','unavailable'] %}
+            {{ (as_timestamp(now()) - as_timestamp(e.last_reported, 0)) < 120 }}
+          {% else %}
+            false
+          {% endif %}
+
+      - name: plc_lc50_comm_alarm
+        unique_id: plc_lc50_comm_alarm
+        device_class: problem
+        state: "{{ not is_state('binary_sensor.plc_lc50_stack_comm_ok', 'on') }}"
+
+  - sensor:
+      - name: plc_lc50_comm_age_s
+        unique_id: plc_lc50_comm_age_s
+        unit_of_measurement: "s"
+        state_class: measurement
+        availability: "{{ is_state('input_boolean.plc_lc50_en', 'on') }}"
+        state: >
+          {% set e = states.binary_sensor.plc_lc50_link %}
+          {% if e is not none and e.state not in ['unknown','unavailable','none',''] %}
+            {{ [(as_timestamp(now()) - as_timestamp(e.last_reported, 0)) | int, 9999] | min }}
+          {% else %}
+            9999
+          {% endif %}
+
+      # ── Scaling livelli vasche ──
+      # raw 13115 (4mA) = 0m, raw 65535 (20mA) = 5.0m
+      # Vasca max utile: 3.30m = 100%
+      - name: plc_lc50_v1_level_m
+        unique_id: plc_lc50_v1_level_m
+        unit_of_measurement: "m"
+        state_class: measurement
+        availability: "{{ states('sensor.plc_lc50_v1_level_mm') not in ['unavailable','unknown'] }}"
+        state: >
+          {% set raw = states('sensor.plc_lc50_v1_level_mm') | float(0) %}
+          {% set m = ((raw - 13115) / (65535 - 13115)) * 5.0 %}
+          {{ [([m, 0] | max), 5.0] | min | round(2) }}
+
+      - name: plc_lc50_v1_level_pct
+        unique_id: plc_lc50_v1_level_pct
+        unit_of_measurement: "%"
+        state_class: measurement
+        availability: "{{ states('sensor.plc_lc50_v1_level_m') not in ['unavailable','unknown'] }}"
+        state: >
+          {% set m = states('sensor.plc_lc50_v1_level_m') | float(0) %}
+          {{ [((m / 3.30) * 100) | round(1), 100] | min }}
+
+      - name: plc_lc50_v2_level_m
+        unique_id: plc_lc50_v2_level_m
+        unit_of_measurement: "m"
+        state_class: measurement
+        availability: "{{ states('sensor.plc_lc50_v2_level_mm') not in ['unavailable','unknown'] }}"
+        state: >
+          {% set raw = states('sensor.plc_lc50_v2_level_mm') | float(0) %}
+          {% set m = ((raw - 13115) / (65535 - 13115)) * 5.0 %}
+          {{ [([m, 0] | max), 5.0] | min | round(2) }}
+
+      - name: plc_lc50_v2_level_pct
+        unique_id: plc_lc50_v2_level_pct
+        unit_of_measurement: "%"
+        state_class: measurement
+        availability: "{{ states('sensor.plc_lc50_v2_level_m') not in ['unavailable','unknown'] }}"
+        state: >
+          {% set m = states('sensor.plc_lc50_v2_level_m') | float(0) %}
+          {{ [((m / 3.30) * 100) | round(1), 100] | min }}

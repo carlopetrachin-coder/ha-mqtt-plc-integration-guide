@@ -1,0 +1,67 @@
+# ============================================================
+# ESEMPIO: Siemens S7-1200 — watchdog (enable/disable + ping)
+# Prefisso: plc_s1200_
+# Aggiungere a: /config/packages/plc/ha_watchdog.yaml
+# ============================================================
+
+input_boolean:
+  plc_s1200_en:
+    name: "PLC S1200 abilitato"
+    icon: mdi:lan-connect
+
+shell_command:
+  plc_enable_s1200:  "rm -f /config/plc/plc_s1200.stop"
+  plc_disable_s1200: "touch /config/plc/plc_s1200.stop"
+  plc_restart_bridge: "ha addons restart local_plc_bridge 2>/dev/null || true"
+
+command_line:
+  - binary_sensor:
+      name: plc_ping_s1200
+      unique_id: plc_ping_s1200
+      command: "ping -c 1 -W 1 192.168.1.20 > /dev/null 2>&1 && echo 'ON' || echo 'OFF'"
+      payload_on: "ON"
+      payload_off: "OFF"
+      scan_interval: 30
+      command_timeout: 2
+
+automation:
+  # Startup — attende ping poi abilita bridge
+  - id: plc_s1200_ex_startup
+    alias: plc_s1200_startup
+    trigger:
+      - platform: homeassistant
+        event: start
+    condition:
+      - "{{ is_state('input_boolean.plc_s1200_en', 'on') }}"
+    action:
+      - wait_template: "{{ is_state('binary_sensor.plc_ping_s1200', 'on') }}"
+        timeout: "00:01:00"
+        continue_on_timeout: true
+      - if: "{{ wait.completed }}"
+        then:
+          - service: shell_command.plc_enable_s1200
+          - delay: "00:00:02"
+          - service: hassio.addon_restart
+            data:
+              addon: local_plc_bridge
+
+  # Toggle manuale
+  - id: plc_s1200_ex_toggle
+    alias: plc_s1200_toggle
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: input_boolean.plc_s1200_en
+    condition:
+      - "{{ trigger.from_state.state not in ['unavailable','unknown'] }}"
+    action:
+      - choose:
+          - conditions: "{{ trigger.to_state.state == 'on' }}"
+            sequence:
+              - service: shell_command.plc_enable_s1200
+          - conditions: "{{ trigger.to_state.state == 'off' }}"
+            sequence:
+              - service: shell_command.plc_disable_s1200
+      - service: hassio.addon_restart
+        data:
+          addon: local_plc_bridge

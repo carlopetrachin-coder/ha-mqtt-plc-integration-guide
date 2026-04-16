@@ -1,0 +1,47 @@
+# ============================================================
+# ESEMPIO: Allen-Bradley LC50 — watchdog (enable/disable + ping)
+# Prefisso: plc_lc50_
+# Aggiungere a: /config/packages/plc/ha_watchdog.yaml
+# oppure creare file separato in packages/plc/
+# ============================================================
+
+input_boolean:
+  plc_lc50_en:
+    name: "PLC LC50 abilitato"
+    icon: mdi:lan-connect
+
+shell_command:
+  plc_enable_lc50:  "rm -f /config/plc/plc_lc50.stop"
+  plc_disable_lc50: "touch /config/plc/plc_lc50.stop"
+
+command_line:
+  - binary_sensor:
+      name: plc_ping_lc50
+      unique_id: plc_ping_lc50
+      command: "ping -c 1 -W 1 10.44.200.2 > /dev/null 2>&1 && echo 'ON' || echo 'OFF'"
+      payload_on: "ON"
+      payload_off: "OFF"
+      scan_interval: 30
+      command_timeout: 2
+
+automation:
+  # Toggle manuale → enable/disable + restart bridge
+  - id: plc_lc50_toggle
+    alias: plc_lc50_toggle
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: input_boolean.plc_lc50_en
+    condition:
+      - "{{ trigger.from_state.state not in ['unavailable','unknown'] }}"
+    action:
+      - choose:
+          - conditions: "{{ trigger.to_state.state == 'on' }}"
+            sequence:
+              - service: shell_command.plc_enable_lc50
+          - conditions: "{{ trigger.to_state.state == 'off' }}"
+            sequence:
+              - service: shell_command.plc_disable_lc50
+      - service: hassio.addon_restart
+        data:
+          addon: local_plc_bridge

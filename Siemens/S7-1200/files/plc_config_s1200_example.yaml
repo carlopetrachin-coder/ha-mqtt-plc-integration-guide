@@ -1,0 +1,53 @@
+# ============================================================
+# ESEMPIO: Siemens S7-1200 — config per plc_config.yaml
+# Prefisso entita: plc_s1200_ (non conflitta con produzione plc_s7_01_)
+# IP: 192.168.1.20 (online, testabile)
+# Driver: snap7 — DB1000, 14 byte
+# ============================================================
+
+- id: plc_s1200
+  enable: true
+  name: "Siemens S7-1200 (esempio)"
+  driver: snap7
+  host: 192.168.1.20
+  rack: 0
+  slot: 1
+  points:
+
+    # ── INGRESSI DIGITALI (DI) — PLC → HA ───────────────────
+    # DB1000 byte 4-5: ingressi I0.0–I1.7
+    - { id: plc_s1200_i0_0, name: "I0.0", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 0 } }
+    - { id: plc_s1200_i0_1, name: "I0.1", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 1 } }
+    - { id: plc_s1200_i0_2, name: "I0.2", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 2 } }
+    - { id: plc_s1200_i0_3, name: "I0.3", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 3 } }
+    - { id: plc_s1200_i0_4, name: "I0.4", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 4 } }
+    - { id: plc_s1200_i0_5, name: "I0.5", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 5 } }
+    - { id: plc_s1200_i0_6, name: "I0.6", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 6 } }
+    - { id: plc_s1200_i0_7, name: "I0.7", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 4, bit: 7 } }
+
+    # ── DO FEEDBACK — PLC → HA ──────────────────────────────
+    # DB1000 byte 6-7: stato reale uscite Q0.0–Q1.1
+    - { id: plc_s1200_q0_0_sts, name: "Q0.0 Stato", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 6, bit: 0 } }
+    - { id: plc_s1200_q0_1_sts, name: "Q0.1 Stato", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 6, bit: 1 } }
+
+    # ── HEARTBEAT PLC — PLC → HA ────────────────────────────
+    # PLC toggle questo bit ogni ciclo OB1 (500ms default)
+    - { id: plc_s1200_sts_plc_hb, name: "PLC Heartbeat", kind: binary_sensor, group: fast, snap7: { db: 1000, byte: 8, bit: 0 } }
+
+    # ── CICLO — PLC → HA ────────────────────────────────────
+    - { id: plc_s1200_cycle_step, name: "Ciclo Step", kind: sensor, group: fast, snap7: { db: 1000, byte: 9, type: uint8 } }
+
+    # ── ANALOGICI (AI) — PLC → HA ───────────────────────────
+    # DB1000 byte 10-13: 2x INT16 (IW64, IW66 — range 0-27648)
+    - { id: plc_s1200_ai0_raw, name: "AI0 Raw", kind: sensor, group: medium, snap7: { db: 1000, byte: 10, type: int16 } }
+    - { id: plc_s1200_ai1_raw, name: "AI1 Raw", kind: sensor, group: medium, snap7: { db: 1000, byte: 12, type: int16 } }
+
+    # ── COMANDI (DO) — HA → PLC ─────────────────────────────
+    # DB1000 byte 0-1: comandi manuali uscite
+    - { id: plc_s1200_q0_0_cmd, name: "Q0.0 Cmd", kind: switch, group: fast, snap7: { db: 1000, byte: 0, bit: 0 } }
+    - { id: plc_s1200_q0_1_cmd, name: "Q0.1 Cmd", kind: switch, group: fast, snap7: { db: 1000, byte: 0, bit: 1 } }
+
+    # ── CICLO CONTROL — HA → PLC ────────────────────────────
+    - { id: plc_s1200_cmd_cycle_enable, name: "Ciclo Enable", kind: switch, group: fast, snap7: { db: 1000, byte: 2, bit: 0 } }
+    - { id: plc_s1200_cmd_ha_hb, name: "HA Heartbeat", kind: switch, group: fast, snap7: { db: 1000, byte: 2, bit: 1 } }
+    - { id: plc_s1200_cmd_cycle_ms, name: "Ciclo ms", kind: sensor, group: medium, snap7: { db: 1000, byte: 2, type: int16 } }

@@ -1,0 +1,65 @@
+# ============================================================
+# ESEMPIO: Card System Check — tabella PLC unificata
+# Prefisso: plc_lc50_, plc_s1200_, plc_s1500_
+# IP: online testabili
+# Tipo: Markdown card con Jinja template
+# Incollare in dashboard HA come card Markdown
+# ============================================================
+
+type: markdown
+card_mod:
+  style: "ha-card { background: transparent; box-shadow: none; }"
+content: >
+  {% set plc_ips = {
+    'lc50': '10.44.200.2',
+    's1200': '192.168.1.20',
+    's1500': '192.168.1.21'
+  } %}
+  <table width="100%">
+  <thead><tr>
+    <th style="text-align:left">PLC</th>
+    <th>En</th>
+    <th>Ping</th>
+    <th>Comm</th>
+    <th>Age</th>
+    <th style="text-align:left">IP</th>
+  </tr></thead>
+  <tbody>
+  {% for plc, label in [
+    ('lc50','Rockwell LC50'),
+    ('s1200','Siemens S7-1200'),
+    ('s1500','Siemens S7-1500')
+  ] %}
+    {% set en   = is_state('input_boolean.plc_' ~ plc ~ '_en', 'on') %}
+    {% set ping = states('binary_sensor.plc_ping_' ~ plc) %}
+    {% set comm = states('binary_sensor.plc_' ~ plc ~ '_stack_comm_ok') %}
+    {% set age  = states('sensor.plc_' ~ plc ~ '_comm_age_s') | float(9999) %}
+    <tr{% if not en %} style="opacity:0.35"{% endif %}>
+      <td><b>{{ label }}</b></td>
+      <td style="text-align:center">
+        {% if en %}✅{% else %}⚫{% endif %}
+      </td>
+      <td style="text-align:center">
+        {% if not en %}—
+        {% elif ping == 'on' %}🟢
+        {% elif ping == 'off' %}<font color="red">🔴</font>
+        {% else %}❓{% endif %}
+      </td>
+      <td style="text-align:center">
+        {% if not en %}—
+        {% elif comm == 'on' %}🟢
+        {% elif comm == 'off' %}<font color="red">🔴</font>
+        {% else %}❓{% endif %}
+      </td>
+      <td style="text-align:center">
+        {% if not en %}—
+        {% elif age >= 9999 %}❓
+        {% elif age > 30 %}<font color="red"><b>{{ age|int }}s</b></font>
+        {% elif age > 15 %}<font color="orange">{{ age|int }}s</font>
+        {% else %}<font color="green">{{ age|int }}s</font>
+        {% endif %}
+      </td>
+      <td><small>{{ plc_ips[plc] | default('?') }}</small></td>
+    </tr>
+  {% endfor %}
+  </tbody></table>

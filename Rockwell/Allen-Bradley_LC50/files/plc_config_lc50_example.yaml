@@ -1,0 +1,42 @@
+# ============================================================
+# ESEMPIO: Allen-Bradley LC50 — config per plc_config.yaml
+# Prefisso entita: plc_lc50_ (non conflitta con produzione plc_rw01_)
+# IP: 10.44.200.2 (online, testabile)
+# Driver: pylogix (EtherNet/IP)
+# ============================================================
+
+- id: plc_lc50
+  enable: true
+  name: "Allen-Bradley LC50 (esempio)"
+  driver: pylogix
+  host: 10.44.200.2
+  slot: 0
+  points:
+
+    # ── INGRESSI DIGITALI (DI) — binary_sensor ──────────────
+    # Pompe — stato marcia
+    - { id: plc_lc50_pm1_marcia,   name: "PM1 Marcia",   kind: binary_sensor, group: fast,   logix: { tag: "PM1_Running", type: bool } }
+    - { id: plc_lc50_pm2_marcia,   name: "PM2 Marcia",   kind: binary_sensor, group: fast,   logix: { tag: "PM2_Running", type: bool } }
+    - { id: plc_lc50_pm3_marcia,   name: "PM3 Marcia",   kind: binary_sensor, group: fast,   logix: { tag: "PM3_Running", type: bool } }
+
+    # Pompe — scatto termico
+    - { id: plc_lc50_pm1_scatto,   name: "PM1 Scatto",   kind: binary_sensor, group: fast,   logix: { tag: "PM1_Trip", type: bool } }
+    - { id: plc_lc50_pm2_scatto,   name: "PM2 Scatto",   kind: binary_sensor, group: fast,   logix: { tag: "PM2_Trip", type: bool } }
+    - { id: plc_lc50_pm3_scatto,   name: "PM3 Scatto",   kind: binary_sensor, group: fast,   logix: { tag: "PM3_Trip", type: bool } }
+
+    # Valvole
+    - { id: plc_lc50_ev_carico,    name: "EV Carico",    kind: binary_sensor, group: fast,   logix: { tag: "EV_Load", type: bool } }
+    - { id: plc_lc50_ev_scarico,   name: "EV Scarico",   kind: binary_sensor, group: fast,   logix: { tag: "EV_Drain", type: bool } }
+
+    # Allarmi
+    - { id: plc_lc50_al_pressostato, name: "Allarme Pressostato", kind: binary_sensor, group: fast, logix: { tag: "AL_Pressure", type: bool } }
+    - { id: plc_lc50_al_allagamento, name: "Allarme Allagamento", kind: binary_sensor, group: fast, logix: { tag: "AL_Flood", type: bool } }
+
+    # ── ANALOGICI (AI) — sensor ─────────────────────────────
+    # Livelli vasche (raw 4-20mA → 0-65535)
+    - { id: plc_lc50_v1_level_mm,  name: "V1 Livello mm", kind: sensor, group: medium, logix: { tag: "V1_Level_Raw", type: int } }
+    - { id: plc_lc50_v2_level_mm,  name: "V2 Livello mm", kind: sensor, group: medium, logix: { tag: "V2_Level_Raw", type: int } }
+
+    # Timer pompe (secondi)
+    - { id: plc_lc50_pm1_timer_s,  name: "PM1 Timer",    kind: sensor, group: slow,   logix: { tag: "PM1_Timer_s", type: int } }
+    - { id: plc_lc50_pm2_timer_s,  name: "PM2 Timer",    kind: sensor, group: slow,   logix: { tag: "PM2_Timer_s", type: int } }
