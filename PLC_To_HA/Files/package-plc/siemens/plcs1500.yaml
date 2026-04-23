@@ -1,0 +1,8 @@
+### PATH: /homeassistant/packages/plc/siemens/plcS1500.yaml
+mqtt:
+  sensor:
+    - name: "S1500 Analogica"
+      unique_id: "s1500_ai_01"
+      state_topic: "plc/plcS1500/ai_01_s1500/state"
+      availability_topic: "plc/plcS1500/status"
+      unit_of_measurement: "bar"

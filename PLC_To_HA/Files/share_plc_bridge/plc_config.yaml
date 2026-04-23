@@ -1,0 +1,50 @@
+mqtt:
+  host: core-mosquitto
+  port: 1883
+  username: mqtt_plc_bridge
+  password: "Bassora2000!"
+  base_topic: plc
+  discovery_prefix: homeassistant
+  client_id: plc_bridge_v3
+
+poll_groups:
+  fast: 1.0
+  medium: 5.0
+  slow: 30.0
+
+plcs:
+  - id: plc_rockwell_01
+    enable: True
+    name: "Allen Bradley LC50"
+    driver: pylogix
+    host: 192.168.0.2
+    slot: 0
+    points:
+      - id: di_01_lc50
+        tag: "DI_01"
+        group: fast
+      - id: ai_01_lc50
+        tag: "AI_01"
+        group: medium
+
+  - id: plcS1200
+    enable: False
+    driver: snap7
+    host: 192.168.0.100
+    rack: 0
+    slot: 1
+    points:
+      - id: di_01_s1200
+        s7: { db: 1, byte: 0, bit: 0, type: bool }
+        group: fast
+
+  - id: plcS1500
+    enable: False
+    driver: snap7
+    host: 192.168.0.200
+    rack: 0
+    slot: 1
+    points:
+      - id: ai_01_s1500
+        s7: { db: 1, offset: 0, type: real }
+        group: medium

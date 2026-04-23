@@ -1,0 +1,27 @@
+name: "PLC Bridge (S7 + CompactLogix) -> MQTT"
+version: "1.0.4"
+slug: "plc_bridge"
+description: "Bridge PLC (Snap7 + Pylogix) verso MQTT con Discovery."
+startup: services
+boot: auto
+init: false
+
+arch:
+  - aarch64
+  - armv7
+  - armhf
+  - amd64
+
+build_from:
+  aarch64: "ghcr.io/home-assistant/aarch64-base:3.19"
+  armv7: "ghcr.io/home-assistant/armv7-base:3.19"
+  armhf: "ghcr.io/home-assistant/armhf-base:3.19"
+  amd64: "ghcr.io/home-assistant/amd64-base:3.19"
+
+options:
+  config_file: "/share/plc_bridge/plc_config.yaml"
+schema:
+  config_file: str
+
+map:
+  - share:rw

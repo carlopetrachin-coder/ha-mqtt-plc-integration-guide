@@ -1,0 +1,9 @@
+### PATH: /homeassistant/packages/plc/siemens/plcS1200.yaml
+mqtt:
+  binary_sensor:
+    - name: "S1200 Ingresso Digitale"
+      unique_id: "s1200_di_01"
+      state_topic: "plc/plcS1200/di_01_s1200/state"
+      availability_topic: "plc/plcS1200/status"
+      payload_on: "True"
+      payload_off: "False"

@@ -1,0 +1,20 @@
+### PATH: /addons/local/plc_bridge/run.sh
+#!/usr/bin/with-contenv bash
+set -e
+
+echo "[BOOT] LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+
+# Controllo libreria Snap7
+python3 - <<'PY'
+import ctypes, sys
+try:
+    ctypes.CDLL("libsnap7.so")
+    print("[BOOT] OK: libsnap7.so loaded")
+except OSError as e:
+    print(f"[BOOT] ERROR: libsnap7.so non trovata -> {e}")
+    sys.exit(1)
+PY
+
+echo "[BOOT] Avvio bridge con config da /share..."
+# Forza il percorso assoluto senza margini di errore
+exec python3 /app/bridge.py /share/plc_bridge/plc_config.yaml

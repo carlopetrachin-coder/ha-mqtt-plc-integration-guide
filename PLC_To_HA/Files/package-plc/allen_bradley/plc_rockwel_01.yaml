@@ -1,0 +1,18 @@
+### PATH: /homeassistant/packages/plc/allen_bradley/plc_rockwell_01.yaml
+mqtt:
+  binary_sensor:
+    - name: "Rockwell DI 01"
+      unique_id: "rockwell_di_01_sensor"
+      state_topic: "plc/plc_rockwell_01/di_01_lc50/state"
+      availability_topic: "plc/plc_rockwell_01/status"
+      payload_on: "True"
+      payload_off: "False"
+      device_class: connectivity
+
+  sensor:
+    - name: "Rockwell Temperatura"
+      unique_id: "rockwell_temp_sensor"
+      state_topic: "plc/plc_rockwell_01/ai_01_lc50/state"
+      availability_topic: "plc/plc_rockwell_01/status"
+      unit_of_measurement: "°C"
+      value_template: "{{ value | float | round(2) }}"

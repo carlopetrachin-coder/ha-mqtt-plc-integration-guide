@@ -1,0 +1,34 @@
+### PATH: /addons/local/plc_bridge/Dockerfile
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
+
+WORKDIR /app
+
+# Installazione dipendenze Alpine
+RUN apk add --no-cache \
+    python3 py3-pip py3-setuptools py3-wheel \
+    git build-base cmake linux-headers openssl-dev bash
+
+# Compilazione Snap7 dai sorgenti
+RUN git clone --depth 1 https://github.com/SCADACS/snap7.git /tmp/snap7 && \
+    cd /tmp/snap7/build/unix && \
+    { make -f x86_64_linux.mk || make -f arm_v7_linux.mk || make -f aarch64_linux.mk || make -f plain_linux.mk; } && \
+    mkdir -p /usr/lib /usr/local/lib && \
+    find /tmp/snap7 -name "libsnap7.so" -exec cp -av {} /usr/lib/libsnap7.so \; && \
+    cp -av /usr/lib/libsnap7.so /usr/local/lib/libsnap7.so && \
+    chmod 755 /usr/lib/libsnap7.so && \
+    rm -rf /tmp/snap7
+
+# Installazione pacchetti Python (Puntando alla tua cartella app)
+COPY app/requirements.txt /app/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /app/requirements.txt
+
+# Copia file applicazione (Puntando alla tua cartella app)
+COPY app/bridge.py /app/bridge.py
+
+# Copia e configura lo script di avvio
+COPY run.sh /run.sh
+RUN chmod a+x /run.sh
+
+ENV LD_LIBRARY_PATH="/usr/lib:/usr/local/lib"
+CMD ["/run.sh"]

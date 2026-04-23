@@ -1,0 +1,163 @@
+### PATH: /addons/local/plc_bridge/app/bridge.py
+import sys
+import time
+import json
+import yaml
+import logging
+from typing import Any, Dict, List, Tuple
+
+import paho.mqtt.client as mqtt
+
+# Caricamento librerie industriali di campo
+try:
+    import snap7
+    from snap7.util import get_bool, get_real
+    HAS_SNAP7 = True
+except Exception:
+    HAS_SNAP7 = False
+
+try:
+    from pylogix import PLC
+    HAS_PYLOGIX = True
+except Exception:
+    HAS_PYLOGIX = False
+
+# Configurazione Logging professionale
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+LOG = logging.getLogger("plc_bridge")
+
+def load_config(path: str) -> Dict[str, Any]:
+    """Carica la configurazione YAML dal percorso specificato."""
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+class PlcBridge:
+    def __init__(self, cfg: Dict[str, Any]):
+        LOG.info("=== SISTEMA PLC BRIDGE - FILTRO ATTIVO ===")
+        self.cfg = cfg
+        self.mqtt_cfg = cfg["mqtt"]
+        self.base_topic = self.mqtt_cfg.get("base_topic", "plc")
+        self.discovery_prefix = self.mqtt_cfg.get("discovery_prefix", "homeassistant")
+        self.poll_groups = cfg.get("poll_groups", {"fast": 1.0, "medium": 5.0, "slow": 30.0})
+        
+        # FILTRO: Carichiamo solo i PLC dove 'enable' è True [cite: 12]
+        self.plcs = [p for p in cfg.get("plcs", []) if p.get("enable", True)]
+        LOG.info(f"PLC in scansione: {[p['id'] for p in self.plcs]}")
+
+        # Configurazione Client MQTT [cite: 12]
+        self.client = mqtt.Client(client_id=self.mqtt_cfg.get("client_id", "plc_bridge_v3"))
+        self.client.username_pw_set(self.mqtt_cfg["username"], self.mqtt_cfg["password"])
+        self.client.on_connect = self.on_connect
+        
+        self.s7_clients = {}
+        self.logix_clients = {}
+
+    def on_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            LOG.info("[MQTT] Connesso con successo al broker!")
+            self.publish_all_discovery()
+        else:
+            LOG.error(f"[MQTT] Errore connessione: Codice {rc}")
+
+    def publish_discovery(self, plc: Dict[str, Any], point: Dict[str, Any]):
+        """Invia l'auto-discovery MQTT per Home Assistant[cite: 14, 15]."""
+        plc_id = plc["id"]
+        pid = point["id"]
+        kind = point.get("kind", "sensor")
+        friendly_name = point.get("name", pid)
+        unique_id = f"plc_{plc_id}_{pid}"
+        
+        topic = f"{self.discovery_prefix}/{kind}/{unique_id}/config"
+        payload = {
+            "name": f"{plc.get('name', plc_id)} {friendly_name}",
+            "unique_id": unique_id,
+            "state_topic": f"{self.base_topic}/{plc_id}/{pid}/state",
+            "availability_topic": f"{self.base_topic}/{plc_id}/status",
+            "device": {
+                "identifiers": [f"plc_{plc_id}"],
+                "name": plc.get("name", plc_id),
+                "manufacturer": "PLC Bridge"
+            }
+        }
+        if "unit" in point:
+            payload["unit_of_measurement"] = point["unit"]
+            
+        self.client.publish(topic, json.dumps(payload), retain=True)
+
+    def publish_all_discovery(self):
+        """Esegue il discovery per tutti i PLC e i relativi punti[cite: 17]."""
+        for plc in self.plcs:
+            for pt in plc.get("points", []):
+                self.publish_discovery(plc, pt)
+            # Stato iniziale offline finché non leggiamo il primo dato [cite: 17]
+            self.client.publish(f"{self.base_topic}/{plc['id']}/status", "offline", retain=True)
+
+    def read_point(self, plc: Dict[str, Any], pt: Dict[str, Any]):
+        """Gestisce la lettura fisica dai PLC Siemens e Rockwell[cite: 18, 20, 21]."""
+        try:
+            # Driver Siemens Snap7 [cite: 18, 19, 20]
+            if plc["driver"] == "snap7" and HAS_SNAP7:
+                pid = plc["id"]
+                if pid not in self.s7_clients:
+                    self.s7_clients[pid] = snap7.client.Client()
+                client = self.s7_clients[pid]
+                if not client.get_connected():
+                    client.connect(plc["host"], plc.get("rack", 0), plc.get("slot", 1))
+                s7 = pt["s7"]
+                if s7["type"] == "real": return get_real(client.db_read(s7["db"], s7["offset"], 4), 0)
+                if s7["type"] == "bool": return get_bool(client.db_read(s7["db"], s7["byte"], 1), 0, s7["bit"])
+
+            # Driver Rockwell Pylogix [cite: 21, 22]
+            if plc["driver"] == "pylogix" and HAS_PYLOGIX:
+                pid = plc["id"]
+                if pid not in self.logix_clients:
+                    p = PLC()
+                    p.IPAddress = plc["host"]
+                    self.logix_clients[pid] = p
+                ret = self.logix_clients[pid].Read(pt["logix"]["tag"])
+                return ret.Value if (ret and ret.StatusCode == 'Success') else None
+        except Exception:
+            return None
+        return None
+
+    def run(self):
+        """Ciclo principale con gestione dei gruppi di polling[cite: 23, 24, 25]."""
+        try:
+            self.client.connect(self.mqtt_cfg["host"], self.mqtt_cfg.get("port", 1883))
+        except Exception as e:
+            LOG.error(f"MQTT Error: {e}")
+            return
+
+        self.client.loop_start()
+        
+        # Organizzazione punti in gruppi (fast, medium, slow) [cite: 23]
+        groups = {}
+        for plc in self.plcs:
+            for pt in plc.get("points", []):
+                g = pt.get("group", "medium")
+                groups.setdefault(g, []).append((plc, pt))
+
+        last_poll = {g: 0.0 for g in groups.keys()}
+
+        while True:
+            now = time.time()
+            for g, items in groups.items():
+                if (now - last_poll[g]) >= self.poll_groups.get(g, 5.0):
+                    last_poll[g] = now
+                    for plc, pt in items:
+                        val = self.read_point(plc, pt)
+                        topic = f"{self.base_topic}/{plc['id']}/{pt['id']}/state"
+                        status_topic = f"{self.base_topic}/{plc['id']}/status"
+                        
+                        if val is not None:
+                            self.client.publish(topic, str(val))
+                            self.client.publish(status_topic, "online", retain=True)
+                        else:
+                            self.client.publish(status_topic, "offline", retain=True)
+            time.sleep(0.1)
+
+if __name__ == "__main__":
+    # Caricamento configurazione dal percorso passato come argomento [cite: 28]
+    config_path = sys.argv[1] if len(sys.argv) > 1 else "/share/plc_bridge/plc_config.yaml"
+    cfg = load_config(config_path)
+    PlcBridge(cfg).run()
